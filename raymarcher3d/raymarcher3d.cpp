@@ -7,9 +7,10 @@
 using namespace std;
 
 float k = 1.0f;
-constexpr int screenX = 250;
-constexpr int screenY = 150;
-const int resScale = 5;
+constexpr int screenX = 600;
+constexpr int screenY = 500;
+Vector2 res = { screenX, screenY };
+const int resScale = 1;
 const float speed = 1.8f;
 
 class Shape;
@@ -245,48 +246,57 @@ public:
 
 int main()
 {
-	/*
+	// raylib setup
+	InitWindow(screenX * resScale, screenY * resScale, "program");
+	SetTargetFPS(60);
+	
 	// setup shader stuff
-	Shader shader = LoadShader(NULL, "raymarcher3d.frag");
+	Shader shader = LoadShader(0, "raymarcher3d.fs");
+
+	if (shader.id == 0) {
+		std::cerr << "Shader failed to load or compile!" << std::endl;
+	}
+
 	// get shader locations
 	int resLoc = GetShaderLocation(shader, "iResolution");
 	int timeLoc = GetShaderLocation(shader, "iTime");
+
 	int countLoc = GetShaderLocation(shader, "shapeCount");
+	int kLoc = GetShaderLocation(shader, "k");
+
 	int typesLoc = GetShaderLocation(shader, "shapeTypes");
 	int origLoc = GetShaderLocation(shader, "shapeOrigins");
 	int sizeLoc = GetShaderLocation(shader, "shapeSizes");
-	*/
 
-	Sphere* s = new Sphere({ 0.0, 0.0, 0.0 }, 1.0f);
-	Box* b = new Box({ 3.0, 0.0, 0.0 }, { 2.0, 1.0, 1.0 });
-	Torus* t = new Torus({ 5.0, 0.0, 0.0 }, { 1.0, 0.5 });
+	int camOriginLoc = GetShaderLocation(shader, "camOrigin");
+	int camDirLoc = GetShaderLocation(shader, "camDir");
+	int camFovLoc = GetShaderLocation(shader, "camFOV");
+	int clipEndLoc = GetShaderLocation(shader, "clipEnd");
+	int hitThresholdLoc = GetShaderLocation(shader, "hitThreshold");
+	
+	// c++ shapes (GONE SOONE!
+	//Sphere* s = new Sphere({ 0.0, 0.0, 0.0 }, 1.0f);
+	//Box* b = new Box({ 3.0, 0.0, 0.0 }, { 2.0, 1.0, 1.0 });
+	//Torus* t = new Torus({ 5.0, 0.0, 0.0 }, { 1.0, 0.5 });
+	//Shape* shapes[] = { b, b};
 
-	Shape* shapes[] = { s, b};
 	int shapesLength = 2;
-	int shapeTypes[] = {0, 1}; // sphere, box
+	int shapeTypes[] = {1, 0}; // sphere, box
 	Vector3 shapePositions[] = {
-		{0.0f, 0.0f, 0.0f},
-		{1.5f, 0.0f, -3.0f}
+		{1.5f, 1.5f, 1.5f},
+		{0.0f, 0.0f, 0.0f}
 	};
 	Vector3 shapeSizes[] = {
-		{1.0f, 0.0f, 0.0f},      // sphere radius in x
-		{0.5f, 0.5f, 1.5f}       // box size
+		{1.5f, 1.5f, 1.5f},       // box size
+		{1.0f, 1.0f, 1.0f}      // sphere radius in x
 	};
 
-	/*
-	SetShaderValue(shader, countLoc, &shapesLength, SHADER_UNIFORM_INT);
-	SetShaderValueV(shader, typesLoc, shapeTypes, SHADER_UNIFORM_INT, shapesLength);
-	SetShaderValueV(shader, origLoc, shapePositions, SHADER_UNIFORM_VEC3, shapesLength);
-	SetShaderValueV(shader, sizeLoc, shapeSizes, SHADER_UNIFORM_VEC3, shapesLength);
-	*/
 	Cam3d cam = Cam3d();
 	cam.origin = { 0.0, 0.0, 5.0 };
+
+	RenderTexture2D target = LoadRenderTexture(screenX, screenY);
 	
-
-	// raylib setup
-	InitWindow(screenX*resScale, screenY*resScale, "program");
-	SetTargetFPS(60);
-
+	
 	// pixel array and image texture
 	Color* singlePixelColArray = new Color[screenX * screenY];
 	Image img;
@@ -304,6 +314,9 @@ int main()
 	// ----------------- GAME LOOP
 	while (WindowShouldClose() == false)
 	{
+		float time = GetTime();
+		// CPU PROCESS STUFF
+		/*
 		cam.initRays();
 
 		int centerIdx = (screenY / 2) * screenX + (screenX / 2);
@@ -341,8 +354,27 @@ int main()
 		}
 		singlePixelColArray[centerIdx] = { 255, 0, 0, 255 };
 
-		UpdateTexture(tex, singlePixelColArray);
+		//UpdateTexture(tex, singlePixelColArray);
+		*/
 
+		// GPU PROCESS STUFF
+		// 
+		// set shader uniform values
+		SetShaderValue(shader, resLoc, &res, SHADER_UNIFORM_VEC2);
+		SetShaderValue(shader, timeLoc, &time, SHADER_UNIFORM_FLOAT);
+
+		SetShaderValue(shader, countLoc, &shapesLength, SHADER_UNIFORM_INT);
+		SetShaderValue(shader, kLoc, &k, SHADER_UNIFORM_FLOAT);
+
+		SetShaderValueV(shader, typesLoc, &shapeTypes, SHADER_UNIFORM_INT, shapesLength);
+		SetShaderValueV(shader, origLoc, &shapePositions, SHADER_UNIFORM_VEC3, shapesLength);
+		SetShaderValueV(shader, sizeLoc, &shapeSizes, SHADER_UNIFORM_VEC3, shapesLength);
+
+		SetShaderValue(shader, camOriginLoc, &cam.origin, SHADER_UNIFORM_VEC3);
+		SetShaderValue(shader, camDirLoc, &cam.dir, SHADER_UNIFORM_VEC3);
+		SetShaderValue(shader, camFovLoc, &cam.fov, SHADER_UNIFORM_FLOAT);
+		SetShaderValue(shader, clipEndLoc, &cam.clipEnd, SHADER_UNIFORM_FLOAT);
+		SetShaderValue(shader, hitThresholdLoc, &cam.hitThreshold, SHADER_UNIFORM_FLOAT);
 
 
 		//------------------------INPUT
@@ -357,12 +389,12 @@ int main()
 			printVec(cam.origin);
 		}
 
-		if (IsKeyDown(KEY_E))
+		if (IsKeyDown(KEY_Q))
 		{
 			cam.origin.y += GetFrameTime() * speed;
 			printVec(cam.origin);
 		}
-		if (IsKeyDown(KEY_Q))
+		if (IsKeyDown(KEY_E))
 		{
 			cam.origin.y -= GetFrameTime() * speed;
 			printVec(cam.origin);
@@ -396,19 +428,26 @@ int main()
 			k += GetFrameTime() * 0.5;
 		}
 
-		//cout << "SDF FROM CAM TO SPHERE: " << cam.origin.x << cam.origin.y << cam.origin.z << ": " << shapes[0]->sdf(cam.origin) << endl;
-
 		//------------------------DRAWING
+		// BEGIN DRAWING
 		BeginDrawing();
 
-		DrawTexturePro(tex, src, dest, org, rot, WHITE);
 
+		// DRAW TO TEXTURE
+		//BeginTextureMode(target);
+		//	ClearBackground(BLACK);
+		//	DrawRectangle(0, 0, screenX, screenY, BLACK);
+		//EndTextureMode();
 
+		
+			ClearBackground(BLACK);
 
+			BeginShaderMode(shader);
+			DrawRectangle(0, 0, screenX, screenY, WHITE);  // Fullscreen quad				//Rectangle r = { 0.0, 0.0, (float)target.texture.width, (float)-target.texture.height };
+				//DrawTextureRec(target.texture, r, { 0.0f, 0.0f }, WHITE);
 
-		DrawFPS(10, 10);
-		ClearBackground(WHITE);
-
+			EndShaderMode();
+			DrawFPS(10, 10);
 		EndDrawing();
 	}
 
