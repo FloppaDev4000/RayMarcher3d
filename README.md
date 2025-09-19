@@ -22,3 +22,13 @@ Built with **C++** and [**Raylib**](https://www.raylib.com/).
 |----------|-------------------------------------|
 | W / A / S / D | Move camera (forward, backward, strafe) |
 | 1 / 2    | Decrease / Increase smoothing       |
+
+---
+
+TODO:
+- Add support for more SDF shapes (torus, octahedron, custom functions)
+- Implement camera rotation
+- Add GUI to tweak rendering settings in real time
+- Add basic lighting (AO, lighting, etc.)
+- Add more SDF blending operations (subtraction, intersection, etc.)
+- Move rendering to GPU to optimize performance
