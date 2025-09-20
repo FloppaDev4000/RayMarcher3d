@@ -5,7 +5,7 @@ Shape SDFs are based on work by [**Inigo Quilez**](https://iquilezles.org/).
 Built with **C++**, **OpenGL**and [**Raylib**](https://www.raylib.com/).
 
 ---
-![demo](./media/Screenshot 2025-09-20 011703.png)
+![demo](./media/img.png)
 ---
 
 ## ✨ Features
