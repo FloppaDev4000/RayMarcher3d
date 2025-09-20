@@ -13,9 +13,13 @@ struct Shape{
     vec3 values;
 };
 
+vec3 lightColor = vec3(0.47, 0.89, 1.0);
+float shininess = 22;
 
 uniform vec2 iResolution;
 uniform float iTime;
+
+uniform vec3 lightPos;
 
 uniform int shapeCount;
 uniform float k;
@@ -90,6 +94,72 @@ float sceneSDF(vec3 pt)
     return d;
 }
 
+vec3 getNormal(vec3 pt)
+{
+    const float EPS = 0.001;
+
+    vec3 v1 = vec3(
+        sceneSDF(pt + vec3(EPS, 0.0, 0.0)),
+        sceneSDF(pt + vec3(0.0, EPS, 0.0)),
+        sceneSDF(pt + vec3(0.0, 0.0, EPS))
+    );
+    vec3 v2 = vec3(
+        sceneSDF(pt - vec3(EPS, 0.0, 0.0)),
+        sceneSDF(pt - vec3(0.0, EPS, 0.0)),
+        sceneSDF(pt - vec3(0.0, 0.0, EPS))
+    );
+
+    return normalize(v1 - v2);
+}
+
+float softShadow(vec3 rayOrigin, vec3 rayDir, float start, float end, float k)
+{
+    float result = 1.0;
+    float prevDistance = 1e20;
+
+    for(float distTravelled = start; distTravelled < end;)
+    {
+        //float distToScene = sceneSDF(rayOrigin + rayDir * distTravelled).w;
+    }
+
+    return result;
+}
+
+float shadow( in vec3 ro, in vec3 rd, float mint, float maxt )
+{
+    float t = mint;
+    for( int i=0; i<256 && t<maxt; i++ )
+    {
+        float h = sceneSDF(ro + rd*t);
+        if( h<0.001 )
+            return 0.0;
+        t += h;
+    }
+    return 1.0;
+}
+
+vec3 lightDir(vec3 pos)
+{
+    return normalize(lightPos - pos);
+}
+
+// PHONG
+vec3 phongAmbient()
+{
+    return 0.05 * lightColor;
+}
+vec3 phongDiffuse(vec3 normal, vec3 pos)
+{
+    float dif = max(dot(normalize(normal), lightDir(pos)), 0.0);
+    return dif * lightColor;
+}
+vec3 phongSpecular(vec3 normal, vec3 pos)
+{
+    vec3 reflectDir = reflect(lightDir(pos), normal);
+    float spec = pow(max(dot(camDir, reflectDir), 0.0), shininess);
+    return spec * lightColor;
+}
+
 vec3 worldUp()
 {
     return vec3(0.0, 1.0, 0.0);
@@ -107,6 +177,8 @@ vec3 camUp()
 {
     return cross(camForward(), camRight());
 }
+
+
 
 void main()
 {
@@ -171,7 +243,15 @@ void main()
     {
         // hit
         didHit = true;
-        color = vec3(0.0, 0.0, 0.2);
+        color = vec3(1.0, 0.0, 0.2);
+        
+        vec3 ambient = phongAmbient();
+        vec3 diffuse = phongDiffuse(getNormal(origin), origin);
+        vec3 specular = phongSpecular(getNormal(origin), origin);
+
+        vec3 lighting = ambient + diffuse + specular;
+
+        color *= lighting;
     }
 
     FragColor = vec4(color, 1.0) + glow;

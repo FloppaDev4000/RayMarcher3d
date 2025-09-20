@@ -2,9 +2,29 @@
 #include <stdio.h>
 #include "raylib.h"
 #include "raymath.h"
+#include "input.hpp"
 #include <vector>
 
 using namespace std;
+
+// WORLD POSITION INFO:
+// +X: left
+// +Y: down
+// +Z: backward
+
+// DEFINE INPUT ACTIONS
+int action_mvLeft[2] = {KEY_A, KEY_A };
+int action_mvRight[2] = { KEY_D, KEY_D };
+int action_mvForward[2] = { KEY_W, KEY_W };
+int action_mvBackward[2] = { KEY_S, KEY_S };
+
+int action_rotLeft[2] = { KEY_LEFT,KEY_LEFT };
+int action_rotRight[2] = { KEY_RIGHT,KEY_RIGHT };
+int action_rotUp[2] = { KEY_UP,KEY_UP };
+int action_rotDown[2] = { KEY_DOWN,KEY_DOWN };
+
+int action_descend[2] = { KEY_LEFT_CONTROL, KEY_LEFT_CONTROL };
+int action_ascend[2] = { KEY_SPACE, KEY_SPACE };
 
 float k = 1.0f;
 constexpr int screenX = 600;
@@ -12,6 +32,7 @@ constexpr int screenY = 500;
 Vector2 res = { screenX, screenY };
 const int resScale = 1;
 const float speed = 1.8f;
+const Vector3 lightPos = { 1.0, -5.0, 3.0 };
 
 class Shape;
 class Sphere;
@@ -126,11 +147,6 @@ public:
 		totalDistance += length;
 		stepsTaken++;
 	}
-
-	void die()
-	{
-		// stop existing
-	}
 };
 
 class Cam3d
@@ -138,6 +154,11 @@ class Cam3d
 public:
 	Vector3 origin = { 0.0f, 0.0f, 0.0f };
 	Vector3 dir = { 0, 0, -1 };
+	Vector2 rotation = { 0, 0 };
+
+	float moveSpeed = 0.1;
+	float rotSpeed = 0.02;
+
 	float fov;
 
 	Vector3 worldUp()
@@ -160,6 +181,36 @@ public:
 	Vector3 up()
 	{
 		return Vector3CrossProduct(forward(), right());
+	}
+
+	void rotate(bool isYaw, float amount)
+	{
+		amount *= rotSpeed;
+		if (isYaw)
+		{
+			dir = Vector3RotateByAxisAngle(dir, { 0.0, 1.0, 0.0 }, amount);
+		}
+		else
+		{
+			dir = Vector3RotateByAxisAngle(dir, { 1.0, 0.0, 0.0 }, amount);
+
+			if (dir.y > 1.0f) dir.y = 1.0f;
+			if (dir.y < -1.0f) dir.y = -1.0f;
+		}
+
+		dir = Vector3Normalize(dir);
+	}
+	void move(Vector3 d)
+	{
+		Vector3 dir = Vector3Zero();
+		cout << dir.x << " " << dir.z << endl;
+		dir = Vector3Add(Vector3Scale(right(), d.x), dir);
+		dir = Vector3Add(Vector3Scale(forward(), -d.z), dir);
+		dir.y += d.y;
+
+		cout << dir.x << " " << dir.z << endl;
+
+		origin += dir * moveSpeed;
 	}
 
 	float clipEnd = 100.0f;
@@ -199,7 +250,6 @@ public:
 			rays[idx].totalDistance = 0.0f;
 			rays[idx].dir = dir;
 			rays[idx].stepsTaken = 0;
-			//rays[idx].dirOffset = Vector3Normalize({ x, y, -1.0f });
 		}
 	}
 
@@ -260,6 +310,7 @@ int main()
 	// get shader locations
 	int resLoc = GetShaderLocation(shader, "iResolution");
 	int timeLoc = GetShaderLocation(shader, "iTime");
+	int lightLoc = GetShaderLocation(shader, "lightPos");
 
 	int countLoc = GetShaderLocation(shader, "shapeCount");
 	int kLoc = GetShaderLocation(shader, "k");
@@ -294,74 +345,31 @@ int main()
 	Cam3d cam = Cam3d();
 	cam.origin = { 0.0, 0.0, 5.0 };
 
-	RenderTexture2D target = LoadRenderTexture(screenX, screenY);
-	
-	
-	// pixel array and image texture
-	Color* singlePixelColArray = new Color[screenX * screenY];
-	Image img;
-	img.data = singlePixelColArray;
-	img.width = screenX;
-	img.height = screenY;
-	img.mipmaps = 1;
-	img.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
-	Texture2D tex = LoadTextureFromImage(img);
-	Rectangle src{ 0, 0, screenX, screenY };
-	Rectangle dest{ 0, 0, screenX*resScale, screenY*resScale };
-	Vector2 org{ 0, 0 };
-	float rot{ 0 };
-
 	// ----------------- GAME LOOP
 	while (WindowShouldClose() == false)
 	{
 		float time = GetTime();
-		// CPU PROCESS STUFF
-		/*
-		cam.initRays();
-
-		int centerIdx = (screenY / 2) * screenX + (screenX / 2);
-
-		for (int idx = 0; idx < cam.rays.size(); idx++)
-		{
-			bool printData = false;
-
-			if (idx == centerIdx)
-			{
-				printData = false;
-			}
-
-			RayMarch& r = cam.rays[idx];
-			bool missed = cam.marchRay(r, shapes, shapesLength, printData);
-
-			if (printData)
-			{
-				if (missed)
-					cout << "Result: Ray MISSED (dead air)" << endl;
-				else
-					cout << "Result: Ray HIT object!" << endl;
-			}
-
 		
-			// glow effect
-			float glow = 1.0f - (float)r.stepsTaken / 100.0f;
-			if (glow < 0.0f) glow = 0.0f;
-			unsigned char glowVal = 255 - (unsigned char)(glow * 255.0f);
-			Color glowCol = { glowVal, 0, glowVal, 255 };
+		//------------------------INPUT
+		Vector2 moveInput = actionVector(action_mvLeft, action_mvRight, action_mvForward, action_mvBackward);
+		float ascendInput = actionAxis(action_ascend, action_descend);
+		Vector3 fullMoveInput = { moveInput.x, ascendInput, moveInput.y };
 
-			singlePixelColArray[idx] = missed ? Color{0, 0, 0, 255} : Color{210, 210, 210, 255};
-		
-			singlePixelColArray[idx] = addCols(singlePixelColArray[idx], glowCol, 3.0);
-		}
-		singlePixelColArray[centerIdx] = { 255, 0, 0, 255 };
+		float yawInput = actionAxis(action_rotLeft, action_rotRight);
+		float pitchInput = actionAxis(action_rotUp, action_rotDown);
 
-		//UpdateTexture(tex, singlePixelColArray);
-		*/
 
-		// GPU PROCESS STUFF
-		// 
-		// set shader uniform values
+
+		if(fullMoveInput != Vector3Zero()) cam.move(fullMoveInput);
+
+
+
+		if(yawInput) cam.rotate(true, yawInput);
+		if(pitchInput) cam.rotate(false, pitchInput);
+
 		SetShaderValue(shader, resLoc, &res, SHADER_UNIFORM_VEC2);
 		SetShaderValue(shader, timeLoc, &time, SHADER_UNIFORM_FLOAT);
+		SetShaderValue(shader, lightLoc, &lightPos, SHADER_UNIFORM_VEC3);
 
 		SetShaderValue(shader, countLoc, &shapesLength, SHADER_UNIFORM_INT);
 		SetShaderValue(shader, kLoc, &k, SHADER_UNIFORM_FLOAT);
@@ -378,6 +386,7 @@ int main()
 
 
 		//------------------------INPUT
+		/*
 		if (IsKeyDown(KEY_A))
 		{
 			cam.origin.x += GetFrameTime() * speed;
@@ -410,10 +419,7 @@ int main()
 			cam.origin.z -= GetFrameTime() * speed;
 			printVec(cam.origin);
 		}
-		if (IsKeyPressed(KEY_SPACE))
-		{
-			cout << "K VALUE: " << k << endl;
-		}
+		*/
 
 		if (IsKeyDown(KEY_ONE))
 		{
@@ -430,22 +436,11 @@ int main()
 
 		//------------------------DRAWING
 		// BEGIN DRAWING
-		BeginDrawing();
-
-
-		// DRAW TO TEXTURE
-		//BeginTextureMode(target);
-		//	ClearBackground(BLACK);
-		//	DrawRectangle(0, 0, screenX, screenY, BLACK);
-		//EndTextureMode();
-
-		
+		BeginDrawing();		
 			ClearBackground(BLACK);
 
 			BeginShaderMode(shader);
-			DrawRectangle(0, 0, screenX, screenY, WHITE);  // Fullscreen quad				//Rectangle r = { 0.0, 0.0, (float)target.texture.width, (float)-target.texture.height };
-				//DrawTextureRec(target.texture, r, { 0.0f, 0.0f }, WHITE);
-
+				DrawRectangle(0, 0, screenX, screenY, WHITE);
 			EndShaderMode();
 			DrawFPS(10, 10);
 		EndDrawing();
