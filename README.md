@@ -2,7 +2,7 @@
 
 A minimal 3D renderer using **ray marching** and **signed distance fields (SDFs)** to visualize procedural 3D shapes.  
 Shape SDFs are based on work by [**Inigo Quilez**](https://iquilezles.org/).  
-Built with **C++**, **OpenGL**and [**Raylib**](https://www.raylib.com/).
+Built with **C++**, **OpenGL** and [**Raylib**](https://www.raylib.com/).
 
 ---
 ![demo](./media/img.png)
