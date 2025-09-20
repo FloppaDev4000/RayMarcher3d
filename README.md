@@ -2,17 +2,15 @@
 
 A minimal 3D renderer using **ray marching** and **signed distance fields (SDFs)** to visualize procedural 3D shapes.  
 Shape SDFs are based on work by [**Inigo Quilez**](https://iquilezles.org/).  
-Built with **C++** and [**Raylib**](https://www.raylib.com/).
+Built with **C++**, **OpenGL**and [**Raylib**](https://www.raylib.com/).
 
 ---
 
 ## ✨ Features
 
-- Ray marching algorithm for accurate surface rendering
-- Signed Distance Field (SDF)-based shape rendering
-- Basic first-person camera movement
-- Glow effect for enhanced visuals
-- Adjustable smoothing
+- Ray marching algorithm for accurate surface rendering with SDF (signed distance field) calculated shapes.
+- Glow effect for enhanced visuals.
+- Phong shading with ambient, diffuse and specular lighting.
 
 ---
 
@@ -29,6 +27,6 @@ TODO:
 - Add support for more SDF shapes (torus, octahedron, custom functions)
 - Implement camera rotation
 - Add GUI to tweak rendering settings in real time
-- Add basic lighting (AO, lighting, etc.)
+- Add per-shape materials
+- Add more lighting effects
 - Add more SDF blending operations (subtraction, intersection, etc.)
-- Move rendering to GPU to optimize performance
