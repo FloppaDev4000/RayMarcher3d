@@ -327,7 +327,7 @@ int main()
 {
 
 	// window setup
-	InitWindow(screenX * resScale, screenY * resScale, "program");
+	InitWindow(screenX + 300, screenY, "program");
 
 	// IMGUI SETUP
 	rlImGuiSetup(true);
@@ -489,32 +489,36 @@ int main()
 
 				bool open = true;
 
+				ImVec2 pos = ImVec2(screenX, 0);
+				ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
+
 				if (ImGui::Begin("Test Window", &open))
 				{
-					// Editable float
 					ImGui::SliderFloat("Smoothness", &k, 0.0f, 2.0f);
 
-					// Editable bias for shadows
 					ImGui::SliderFloat("Shadow Bias", &shadowBias, 1.0, 200.0);
 					ImGui::SliderFloat("Shadow Softness", &shadowSmoothness, 0.0, 20.0);
 
 					ImGui::SliderFloat("Shininess", &shininess, 3.0, 50.0);
 
-					// Integer slider for shadow softness (marching K)
-					//ImGui::SliderInt("Shadow Softness", &softness, 1, 64);
-
-					// Color picker
 					ImGui::ColorEdit3("Ambient Color", (float*)&bgColor);
 
-					// Color picker
 					ImGui::ColorEdit3("Glow Color", (float*)&glowCol);
+
+					
 
 					ImGui::SliderFloat("Glow Intensity", &glowIntensity, 0.0, 0.02);
 
 					for (int i = 0; i < shapesLength; i++)
 					{
+						ImGui::PushID(i);
 						ImGui::TextUnformatted("Shape");
+						ImGui::TextUnformatted("Position");
+						ImGui::SliderFloat("X:", &shapePositions[i].x, -8, 8);
+						ImGui::SliderFloat("Y:", &shapePositions[i].y, -8, 8);
+						ImGui::SliderFloat("Z:", &shapePositions[i].z, -8, 8);
 						
+						ImGui::PopID();
 					}
 
 				}
