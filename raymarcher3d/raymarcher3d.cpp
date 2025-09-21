@@ -4,6 +4,7 @@
 #include "raymath.h"
 #include "input.hpp"
 #include <vector>
+#include <string>
 
 #include <imgui/imgui.h>
 #include <imgui/backends/imgui_impl_dx9.h>
@@ -34,8 +35,7 @@ int action_ascend[2] = { KEY_SPACE, KEY_SPACE };
 
 constexpr int screenX = 800;
 constexpr int screenY = 600;
-Vector2 res = { screenX, screenY };
-const int resScale = 1;
+float resScale = 0.5;
 
 // PARAMETERS TO EDIT
 float k = 1.0f;
@@ -57,6 +57,9 @@ float shadowBias = 100;
 Vector3 glowCol = { 1.0, 1.0, 1.0 };
 float glowIntensity = 0.01;
 
+int aoSteps = 5;
+float aoStepSize = 0.05;
+
 
 
 bool isCursor = true;
@@ -77,6 +80,7 @@ void printVec(Vector3);
 void printDirs(vector<RayMarch>);
 Color addCols(Color, Color, float);
 void swapCursor();
+Vector2 resolution(bool);
 
 class Shape
 {
@@ -327,7 +331,7 @@ int main()
 {
 
 	// window setup
-	InitWindow(screenX + 300, screenY, "program");
+	InitWindow((screenX) + 300, screenY, "program");
 
 	// IMGUI SETUP
 	rlImGuiSetup(true);
@@ -339,7 +343,7 @@ int main()
 	Shader aaShader = LoadShader(0, "antiAlias.fs");
 
 	int resLocAA = GetShaderLocation(aaShader, "resolution");
-	SetShaderValue(aaShader, resLocAA, &res, SHADER_UNIFORM_VEC2);
+	
 
 	if (shader.id == 0) {
 		std::cerr << "Shader failed to load or compile!" << std::endl;
@@ -372,6 +376,8 @@ int main()
 	int glowColLoc = GetShaderLocation(shader, "glowCol");
 	int glowIntensityLoc = GetShaderLocation(shader, "glowIntensity");
 	int shadowSmoothLoc = GetShaderLocation(shader, "shadowSmoothness");
+	int aoStepsLoc = GetShaderLocation(shader, "aoSteps");
+	int aoStepSizeLoc = GetShaderLocation(shader, "aoStepSize");
 
 	swapCursor();
 
@@ -396,9 +402,15 @@ int main()
 	Cam3d cam = Cam3d();
 	cam.origin = { 0.0, 0.0, 5.0 };
 
+
 	// ----------------- GAME LOOP
 	while (WindowShouldClose() == false)
 	{
+		Vector2 r = resolution(true);
+		Vector2 r2 = resolution(false);
+		RenderTexture2D sceneRT = LoadRenderTexture(r.x, r.y);
+		RenderTexture2D postRT = LoadRenderTexture(r.x, r.y);
+	
 		float time = GetTime();
 		
 		//------------------------INPUT
@@ -407,7 +419,7 @@ int main()
 		Vector3 fullMoveInput = { moveInput.x, ascendInput, moveInput.y };
 
 		// toggle cursor
-		if (IsKeyPressed(KEY_ENTER))
+		if (IsKeyPressed(KEY_X))
 		{
 			swapCursor();
 		}
@@ -417,13 +429,12 @@ int main()
 
 		if(fullMoveInput != Vector3Zero()) cam.move(fullMoveInput);
 
-
-
-
 		if(lookInput.x) cam.rotate(true, lookInput.x);
 		if(lookInput.y) cam.rotate(false,-lookInput.y);
 
-		SetShaderValue(shader, resLoc, &res, SHADER_UNIFORM_VEC2);
+		SetShaderValue(aaShader, resLocAA, &r, SHADER_UNIFORM_VEC2);
+
+		SetShaderValue(shader, resLoc, &r, SHADER_UNIFORM_VEC2);
 		SetShaderValue(shader, timeLoc, &time, SHADER_UNIFORM_FLOAT);
 
 		SetShaderValue(shader, countLoc, &shapesLength, SHADER_UNIFORM_INT);
@@ -449,6 +460,8 @@ int main()
 		SetShaderValue(shader, glowColLoc, &glowCol, SHADER_UNIFORM_VEC3);
 		SetShaderValue(shader, glowIntensityLoc, &glowIntensity, SHADER_UNIFORM_FLOAT);
 		SetShaderValue(shader, shadowSmoothLoc, &shadowSmoothness, SHADER_UNIFORM_FLOAT);
+		SetShaderValue(shader, aoStepsLoc, &aoSteps, SHADER_UNIFORM_INT);
+		SetShaderValue(shader, aoStepSizeLoc, &aoStepSize, SHADER_UNIFORM_FLOAT);
 
 		if (IsKeyDown(KEY_ONE))
 		{
@@ -474,13 +487,19 @@ int main()
 
 
 		//------------------------DRAWING
-		RenderTexture2D sceneRT = LoadRenderTexture(screenX, screenY);
+		
 		
 		// BEGIN DRAWING
 		BeginTextureMode(sceneRT);
 		ClearBackground(BLACK);
 		BeginShaderMode(shader);
-		DrawRectangle(0, 0, screenX, screenY, WHITE);
+		DrawRectangle(0, 0, screenX*resScale, screenY*resScale, WHITE);
+		EndShaderMode();
+		EndTextureMode();
+
+		BeginTextureMode(postRT);
+		BeginShaderMode(aaShader);
+		DrawTexture(sceneRT.texture, 0, 0, WHITE);
 		EndShaderMode();
 		EndTextureMode();
 
@@ -494,6 +513,7 @@ int main()
 
 				if (ImGui::Begin("Test Window", &open))
 				{
+					ImGui::SliderFloat("Resolution Scale", &resScale, 0.01f, 1.0f);
 					ImGui::SliderFloat("Smoothness", &k, 0.0f, 2.0f);
 
 					ImGui::SliderFloat("Shadow Bias", &shadowBias, 1.0, 200.0);
@@ -502,36 +522,86 @@ int main()
 					ImGui::SliderFloat("Shininess", &shininess, 3.0, 50.0);
 
 					ImGui::ColorEdit3("Ambient Color", (float*)&bgColor);
-
 					ImGui::ColorEdit3("Glow Color", (float*)&glowCol);
-
-					
-
 					ImGui::SliderFloat("Glow Intensity", &glowIntensity, 0.0, 0.02);
+
+					ImGui::SliderInt("AO steps", &aoSteps, 0, 10);
+					ImGui::SliderFloat("AO step size", &aoStepSize, 0.01, 0.1);
+
+					ImGui::TextUnformatted("Light Pos");
+					ImGui::SliderFloat("X:", &lightPos.x, -8, 8);
+					ImGui::SliderFloat("Y:", &lightPos.y, -8, 8);
+					ImGui::SliderFloat("Z:", &lightPos.z, -8, 8);
 
 					for (int i = 0; i < shapesLength; i++)
 					{
+						ImGui::Separator();
+
 						ImGui::PushID(i);
-						ImGui::TextUnformatted("Shape");
+
+						ImGui::DragInt("Shape Type", &shapeTypes[i], 0, 3);
+
+						string name = to_string(i);
+
+						// print titles and values
+						switch (shapeTypes[i])
+						{
+							case 0:
+								name += ": Sphere";
+								ImGui::TextUnformatted(name.c_str());
+								ImGui::SliderFloat("Radius", &shapeSizes[i].x, 0.1, 5.0);
+								break;
+							case 1:
+								name += ": Box";
+								ImGui::TextUnformatted(name.c_str());
+								ImGui::SliderFloat("Size X", &shapeSizes[i].x, 0.1, 5.0);
+								ImGui::SliderFloat("Size Y", &shapeSizes[i].y, 0.1, 5.0);
+								ImGui::SliderFloat("Size Z", &shapeSizes[i].z, 0.1, 5.0);
+								break;
+							case 2:
+								name += ": torus";
+								ImGui::TextUnformatted(name.c_str());
+								ImGui::SliderFloat("R", &shapeSizes[i].x, 0.1, 5.0);
+								ImGui::SliderFloat("r", &shapeSizes[i].y, 0.1, 5.0);
+								break;
+							case 3:
+								name += ": mandelbulb";
+								ImGui::TextUnformatted(name.c_str());
+								ImGui::SliderFloat("Iterations", &shapeSizes[i].x, 1.0, 15.0);
+								ImGui::SliderFloat("Radius", &shapeSizes[i].y, 0.1, 5.0);
+								ImGui::SliderFloat("Power", &shapeSizes[i].z, 0.1, 10.0);
+								break;
+						}
+
+						
+
 						ImGui::TextUnformatted("Position");
 						ImGui::SliderFloat("X:", &shapePositions[i].x, -8, 8);
 						ImGui::SliderFloat("Y:", &shapePositions[i].y, -8, 8);
 						ImGui::SliderFloat("Z:", &shapePositions[i].z, -8, 8);
+
+						ImGui::ColorEdit3("Color", (float*)&shapeCols[i]);
+
+						// PRINT VALUES
 						
 						ImGui::PopID();
 					}
 
 				}
 				ImGui::End();
+			
 
 			ClearBackground(BLACK);
 			BeginShaderMode(aaShader);
-			DrawTextureRec(sceneRT.texture, Rectangle{ 0, 0, screenX, -screenY, }, { 0, 0 }, WHITE);
+			DrawTexturePro(postRT.texture, Rectangle{ 0, 0, screenX*resScale, screenY*resScale }, Rectangle{ 0, 0, screenX, -screenY }, { 0, 0 }, 0, WHITE);
 			EndShaderMode();
+
 			
 			DrawFPS(10, 10);
 			rlImGuiEnd();
 		EndDrawing();
+		UnloadRenderTexture(sceneRT);
+		UnloadRenderTexture(postRT);
 	}
 	rlImGuiShutdown();
 	CloseWindow();
@@ -623,4 +693,9 @@ void swapCursor()
 	isCursor = !isCursor;
 	resetMouse();
 
+}
+
+Vector2 resolution(bool isRender)
+{
+	if (isRender) return { screenX*resScale, screenY *resScale}; else return{ screenX, screenY };
 }

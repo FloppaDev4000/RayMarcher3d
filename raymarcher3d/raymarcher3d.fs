@@ -42,6 +42,8 @@ uniform float shininess;
 uniform vec3 glowCol;
 uniform float glowIntensity;
 uniform float shadowSmoothness;
+uniform int aoSteps;
+uniform float aoStepSize;
 
 float shadowBias = hitThreshold * sb;
 
@@ -71,10 +73,12 @@ float sdTorus(vec3 origin, vec3 pt, vec2 torus)
 
 float sdfMandelbulb(vec3 origin, vec3 pt, vec3 data)
 {
-    vec3 p = pt + origin;
+    float scale = data.y;
+    vec3 p = (pt + origin) / scale;
 
     float iterations = data.x;
-    float radius = data.y;
+
+    float radius = scale * 2;
     float power = data.z;
 
     vec3 z = p;
@@ -100,7 +104,7 @@ float sdfMandelbulb(vec3 origin, vec3 pt, vec3 data)
         z += p;
     }
 
-    return 0.5 * log(r) * r / dr;
+    return (0.5 * log(r) * r / dr) * scale;
 }
 
 vec2 smin( float a, float b, float k )
@@ -164,6 +168,28 @@ vec4 sceneSDF(vec3 pt)
 
     return vec4(totalCol, totalDist);
 }
+vec4 sceneSDFwithLight(vec3 pt)
+{
+    float totalDist = 1e6;
+    vec3 totalCol = vec3(0, 0, 0);
+    for(int i = 0; i < shapeCount; ++i)
+    {
+        float distance = getSdf(shapes[i], pt);
+        vec3 col = shapeCols[i];
+        vec4 data = combine(totalDist, distance, totalCol, col, 0, k);
+        data.w = min(data.w, sdSphere(-lightPos, pt, 0.1f));
+        totalCol = data.xyz;
+        totalDist = data.w;
+    }
+
+    // light was hit
+    if(sdSphere(-lightPos, pt, 0.1f) <= hitThreshold)
+    {
+        return vec4(3.99); // escape value
+    }
+
+    return vec4(totalCol, totalDist);
+}
 
 vec3 getNormal(vec3 pt)
 {
@@ -202,25 +228,22 @@ float softShadow(vec3 origin, vec3 lightDir, float minT, float maxT)
     return clamp(res, 0.0, 1.0);
 }
 
+float saturate(float f)
+{
+    return clamp(f, 0.0, 1.0);
+}
+
 float ambientOcclusion (vec3 pos, vec3 normal)
 {
     float sum = 0;
-    int aoSteps = 5;
-    float aoStepSize = 0.1;
     for (int i = 0; i < aoSteps; i ++)
     {
         vec3 p = pos + normal * (i+1) * aoStepSize;
         sum += sceneSDF(p).w;
     }
-    return sum / (aoSteps * aoStepSize);
+    float res = sum / (aoSteps * aoStepSize);
 
-    float acc = 0;
-    for(int i = 1; i <= aoSteps; ++i)
-    {
-        float d = sceneSDF(pos + i * aoStepSize * normal).w;
-        acc += exp2(-i) * (i*aoStepSize - max(d, 0));
-    }
-    return min(1 - 0.5 * acc, 1);
+    return res;
 }
 
 vec3 lightDir(vec3 pos)
@@ -228,10 +251,7 @@ vec3 lightDir(vec3 pos)
     return normalize(lightPos - pos);
 }
 
-float saturate(float f)
-{
-    return clamp(f, 0.0, 1.0);
-}
+
 
 //--------------------------------------PHONG
 vec3 phongAmbient()
@@ -309,10 +329,20 @@ void main()
     float length = hitThreshold;
     vec3 localCol = vec3(0.0, 0.0, 0.0);
     vec4 info;
+    float glowAcc = 0;
     while(totalDistance < clipEnd && length >= hitThreshold)
     {
-        info = sceneSDF(origin);
+        info = sceneSDFwithLight(origin);
+        if(info.w == 3.99)
+        {
+            FragColor = vec4(1.0);
+            return;
+        }
+
         length = info.w;
+
+        // add glow value
+        glowAcc += pow(1e-3 / max(length, 1e-6), glowIntensity);
 
         // march ray once
         origin += dir * length;
@@ -321,7 +351,7 @@ void main()
     }
 
     vec3 color;
-    vec4 glow = vec4(glowCol, 1.0) * stepsTaken * glowIntensity;
+    vec4 glow = vec4(glowCol, 1.0) * glowIntensity * glowAcc;
 
     // ray has finished! get ray data and set color
     if (totalDistance > clipEnd)
@@ -331,6 +361,8 @@ void main()
     } 
     else
     {
+        
+
         // hit
         color = info.xyz;
         vec3 normal = getNormal(origin);
@@ -348,17 +380,20 @@ void main()
 
         vec3 specular = phongSpecular(getNormal(origin), origin);
         
-        float AO = ambientOcclusion(origin, normal) * shadow;
 
         float totalLight = min(lighting, shadow);
-        if(totalLight < 0.0){totalLight = 1;}
+
+        float AO = ambientOcclusion(origin, normal) * 0.3;
+        glow *= AO;
+        //AO = saturate(AO);
 
         totalLight = pow(totalLight, 1/2.4) * 1.055 - 0.055; // gamma correction
-        vec3 totalLightVec = vec3(totalLight);// + glow.xyz;
+        //vec3 totalLightVec = vec3(totalLight) + glow.xyz;
 
         // final col setup
-        color = color*totalLight + bgColor*0.5 + specular*totalLight;
-    }
+        color = (color + bgColor*0.5)*totalLight + bgColor*0.5*AO + max(specular*totalLight, 0);
+        //color = vec3(AO);
+    }   
 
-    FragColor = vec4(color, 1);// + glow;
+    FragColor = vec4(color, 1) + glow;
 }
