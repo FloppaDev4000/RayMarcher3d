@@ -5,6 +5,12 @@
 #include "input.hpp"
 #include <vector>
 
+#include <imgui/imgui.h>
+#include <imgui/backends/imgui_impl_dx9.h>
+#include <imgui/backends/imgui_impl_win32.h>
+
+#include "rlImGui/rlImGui.h"
+
 using namespace std;
 
 // WORLD POSITION INFO:
@@ -26,13 +32,34 @@ int action_rotDown[2] = { KEY_DOWN,KEY_DOWN };
 int action_descend[2] = { KEY_LEFT_CONTROL, KEY_LEFT_CONTROL };
 int action_ascend[2] = { KEY_SPACE, KEY_SPACE };
 
-float k = 1.0f;
-constexpr int screenX = 600;
-constexpr int screenY = 500;
+constexpr int screenX = 800;
+constexpr int screenY = 600;
 Vector2 res = { screenX, screenY };
 const int resScale = 1;
-const float speed = 1.8f;
-const Vector3 lightPos = { 1.0, -5.0, 3.0 };
+
+// PARAMETERS TO EDIT
+float k = 1.0f;
+float speed = 1.8f;
+float mouseSens = 0.2;
+
+Vector3 lightPos = { 5.0, -6.0, 5.0 };
+Vector3 lightCol = { 1.0, 1.0, 1.0 };
+
+Vector3 bgColor = { 0.1, 0.1, 0.2 };
+
+float shininess = 22.0;
+float specular = 1.0;
+
+float shadowIntensity = 1.0;
+float shadowSmoothness = 1.0;
+float shadowBias = 100;
+
+Vector3 glowCol = { 1.0, 1.0, 1.0 };
+float glowIntensity = 0.01;
+
+
+
+bool isCursor = true;
 
 class Shape;
 class Sphere;
@@ -49,6 +76,7 @@ Vector3 EulerToDirection(Vector3);
 void printVec(Vector3);
 void printDirs(vector<RayMarch>);
 Color addCols(Color, Color, float);
+void swapCursor();
 
 class Shape
 {
@@ -192,10 +220,11 @@ public:
 		}
 		else
 		{
-			dir = Vector3RotateByAxisAngle(dir, { 1.0, 0.0, 0.0 }, amount);
+			dir = Vector3RotateByAxisAngle(dir, right(), amount);
 
 			if (dir.y > 1.0f) dir.y = 1.0f;
 			if (dir.y < -1.0f) dir.y = -1.0f;
+
 		}
 
 		dir = Vector3Normalize(dir);
@@ -214,7 +243,7 @@ public:
 	}
 
 	float clipEnd = 100.0f;
-	float hitThreshold = 0.01f;
+	float hitThreshold = 0.001f;
 
 	std::vector<RayMarch> rays{ screenX * screenY };
 
@@ -296,12 +325,21 @@ public:
 
 int main()
 {
-	// raylib setup
+
+	// window setup
 	InitWindow(screenX * resScale, screenY * resScale, "program");
+
+	// IMGUI SETUP
+	rlImGuiSetup(true);
+	
 	SetTargetFPS(60);
 	
 	// setup shader stuff
 	Shader shader = LoadShader(0, "raymarcher3d.fs");
+	Shader aaShader = LoadShader(0, "antiAlias.fs");
+
+	int resLocAA = GetShaderLocation(aaShader, "resolution");
+	SetShaderValue(aaShader, resLocAA, &res, SHADER_UNIFORM_VEC2);
 
 	if (shader.id == 0) {
 		std::cerr << "Shader failed to load or compile!" << std::endl;
@@ -310,7 +348,6 @@ int main()
 	// get shader locations
 	int resLoc = GetShaderLocation(shader, "iResolution");
 	int timeLoc = GetShaderLocation(shader, "iTime");
-	int lightLoc = GetShaderLocation(shader, "lightPos");
 
 	int countLoc = GetShaderLocation(shader, "shapeCount");
 	int kLoc = GetShaderLocation(shader, "k");
@@ -318,28 +355,42 @@ int main()
 	int typesLoc = GetShaderLocation(shader, "shapeTypes");
 	int origLoc = GetShaderLocation(shader, "shapeOrigins");
 	int sizeLoc = GetShaderLocation(shader, "shapeSizes");
+	int colsLoc = GetShaderLocation(shader, "shapeCols");
 
 	int camOriginLoc = GetShaderLocation(shader, "camOrigin");
 	int camDirLoc = GetShaderLocation(shader, "camDir");
 	int camFovLoc = GetShaderLocation(shader, "camFOV");
 	int clipEndLoc = GetShaderLocation(shader, "clipEnd");
 	int hitThresholdLoc = GetShaderLocation(shader, "hitThreshold");
-	
-	// c++ shapes (GONE SOONE!
-	//Sphere* s = new Sphere({ 0.0, 0.0, 0.0 }, 1.0f);
-	//Box* b = new Box({ 3.0, 0.0, 0.0 }, { 2.0, 1.0, 1.0 });
-	//Torus* t = new Torus({ 5.0, 0.0, 0.0 }, { 1.0, 0.5 });
-	//Shape* shapes[] = { b, b};
+
+	// debug params
+	int sbLoc = GetShaderLocation(shader, "sb");
+	int lightColLoc = GetShaderLocation(shader, "lightColor");
+	int lightLoc = GetShaderLocation(shader, "lightPos");
+	int bgColLoc = GetShaderLocation(shader, "bgColor");
+	int shininessLoc = GetShaderLocation(shader, "shininess");
+	int glowColLoc = GetShaderLocation(shader, "glowCol");
+	int glowIntensityLoc = GetShaderLocation(shader, "glowIntensity");
+	int shadowSmoothLoc = GetShaderLocation(shader, "shadowSmoothness");
+
+	swapCursor();
 
 	int shapesLength = 2;
-	int shapeTypes[] = {1, 0}; // sphere, box
+	int shapeTypes[] = {1, 0, 3};
 	Vector3 shapePositions[] = {
-		{1.5f, 1.5f, 1.5f},
-		{0.0f, 0.0f, 0.0f}
+		{-2.0f, 3.5f, -1.0f},
+		{0.0f, 0.0f, 0.0f},
+		{2.0, -2.0, -2.0}
 	};
 	Vector3 shapeSizes[] = {
-		{1.5f, 1.5f, 1.5f},       // box size
-		{1.0f, 1.0f, 1.0f}      // sphere radius in x
+		{1.5f, 1.5f, 1.5f},
+		{1.0f, 1.0f, 1.0f},
+		{8.0, 10.0, 3.0}
+	};
+	Vector3 shapeCols[] = {
+		{0.8, 0.2, 0.2},
+		{0.8, 0.9, 0.1},
+		{0.0, 1.0, 1.0}
 	};
 
 	Cam3d cam = Cam3d();
@@ -355,21 +406,25 @@ int main()
 		float ascendInput = actionAxis(action_ascend, action_descend);
 		Vector3 fullMoveInput = { moveInput.x, ascendInput, moveInput.y };
 
-		float yawInput = actionAxis(action_rotLeft, action_rotRight);
-		float pitchInput = actionAxis(action_rotUp, action_rotDown);
-
-
+		// toggle cursor
+		if (IsKeyPressed(KEY_ENTER))
+		{
+			swapCursor();
+		}
+		
+		Vector2 lookInput = Vector2Zero();
+		if(!isCursor) lookInput = mouseMovement() * mouseSens;
 
 		if(fullMoveInput != Vector3Zero()) cam.move(fullMoveInput);
 
 
 
-		if(yawInput) cam.rotate(true, yawInput);
-		if(pitchInput) cam.rotate(false, pitchInput);
+
+		if(lookInput.x) cam.rotate(true, lookInput.x);
+		if(lookInput.y) cam.rotate(false,-lookInput.y);
 
 		SetShaderValue(shader, resLoc, &res, SHADER_UNIFORM_VEC2);
 		SetShaderValue(shader, timeLoc, &time, SHADER_UNIFORM_FLOAT);
-		SetShaderValue(shader, lightLoc, &lightPos, SHADER_UNIFORM_VEC3);
 
 		SetShaderValue(shader, countLoc, &shapesLength, SHADER_UNIFORM_INT);
 		SetShaderValue(shader, kLoc, &k, SHADER_UNIFORM_FLOAT);
@@ -377,6 +432,7 @@ int main()
 		SetShaderValueV(shader, typesLoc, &shapeTypes, SHADER_UNIFORM_INT, shapesLength);
 		SetShaderValueV(shader, origLoc, &shapePositions, SHADER_UNIFORM_VEC3, shapesLength);
 		SetShaderValueV(shader, sizeLoc, &shapeSizes, SHADER_UNIFORM_VEC3, shapesLength);
+		SetShaderValueV(shader, colsLoc, &shapeCols, SHADER_UNIFORM_VEC3, shapesLength);
 
 		SetShaderValue(shader, camOriginLoc, &cam.origin, SHADER_UNIFORM_VEC3);
 		SetShaderValue(shader, camDirLoc, &cam.dir, SHADER_UNIFORM_VEC3);
@@ -384,42 +440,15 @@ int main()
 		SetShaderValue(shader, clipEndLoc, &cam.clipEnd, SHADER_UNIFORM_FLOAT);
 		SetShaderValue(shader, hitThresholdLoc, &cam.hitThreshold, SHADER_UNIFORM_FLOAT);
 
-
-		//------------------------INPUT
-		/*
-		if (IsKeyDown(KEY_A))
-		{
-			cam.origin.x += GetFrameTime() * speed;
-			printVec(cam.origin);
-		}
-		if (IsKeyDown(KEY_D))
-		{
-			cam.origin.x -= GetFrameTime() * speed;
-			printVec(cam.origin);
-		}
-
-		if (IsKeyDown(KEY_Q))
-		{
-			cam.origin.y += GetFrameTime() * speed;
-			printVec(cam.origin);
-		}
-		if (IsKeyDown(KEY_E))
-		{
-			cam.origin.y -= GetFrameTime() * speed;
-			printVec(cam.origin);
-		}
-
-		if (IsKeyDown(KEY_S))
-		{
-			cam.origin.z += GetFrameTime() * speed;
-			printVec(cam.origin);
-		}
-		if (IsKeyDown(KEY_W))
-		{
-			cam.origin.z -= GetFrameTime() * speed;
-			printVec(cam.origin);
-		}
-		*/
+		// debug params
+		SetShaderValue(shader, sbLoc, &shadowBias, SHADER_UNIFORM_FLOAT);
+		SetShaderValue(shader, lightLoc, &lightPos, SHADER_UNIFORM_VEC3);
+		SetShaderValue(shader, lightColLoc, &lightCol, SHADER_UNIFORM_VEC3);
+		SetShaderValue(shader, bgColLoc, &bgColor, SHADER_UNIFORM_VEC3);
+		SetShaderValue(shader, shininessLoc, &shininess, SHADER_UNIFORM_FLOAT);
+		SetShaderValue(shader, glowColLoc, &glowCol, SHADER_UNIFORM_VEC3);
+		SetShaderValue(shader, glowIntensityLoc, &glowIntensity, SHADER_UNIFORM_FLOAT);
+		SetShaderValue(shader, shadowSmoothLoc, &shadowSmoothness, SHADER_UNIFORM_FLOAT);
 
 		if (IsKeyDown(KEY_ONE))
 		{
@@ -434,18 +463,73 @@ int main()
 			k += GetFrameTime() * 0.5;
 		}
 
-		//------------------------DRAWING
-		// BEGIN DRAWING
-		BeginDrawing();		
-			ClearBackground(BLACK);
+		if (IsKeyDown(KEY_THREE)) {
+			shadowBias -= GetFrameTime() * 300;
+			cout << "BIAS: " << shadowBias << endl;
+		}
+		if (IsKeyDown(KEY_FOUR)) {
+			shadowBias += GetFrameTime() * 300;
+			cout << "BIAS: " << shadowBias << endl;
+		}
 
-			BeginShaderMode(shader);
-				DrawRectangle(0, 0, screenX, screenY, WHITE);
+
+		//------------------------DRAWING
+		RenderTexture2D sceneRT = LoadRenderTexture(screenX, screenY);
+		
+		// BEGIN DRAWING
+		BeginTextureMode(sceneRT);
+		ClearBackground(BLACK);
+		BeginShaderMode(shader);
+		DrawRectangle(0, 0, screenX, screenY, WHITE);
+		EndShaderMode();
+		EndTextureMode();
+
+		BeginDrawing();		
+			rlImGuiBegin();
+
+				bool open = true;
+
+				if (ImGui::Begin("Test Window", &open))
+				{
+					// Editable float
+					ImGui::SliderFloat("Smoothness", &k, 0.0f, 2.0f);
+
+					// Editable bias for shadows
+					ImGui::SliderFloat("Shadow Bias", &shadowBias, 1.0, 200.0);
+					ImGui::SliderFloat("Shadow Softness", &shadowSmoothness, 0.0, 20.0);
+
+					ImGui::SliderFloat("Shininess", &shininess, 3.0, 50.0);
+
+					// Integer slider for shadow softness (marching K)
+					//ImGui::SliderInt("Shadow Softness", &softness, 1, 64);
+
+					// Color picker
+					ImGui::ColorEdit3("Ambient Color", (float*)&bgColor);
+
+					// Color picker
+					ImGui::ColorEdit3("Glow Color", (float*)&glowCol);
+
+					ImGui::SliderFloat("Glow Intensity", &glowIntensity, 0.0, 0.02);
+
+					for (int i = 0; i < shapesLength; i++)
+					{
+						ImGui::TextUnformatted("Shape");
+						
+					}
+
+				}
+				ImGui::End();
+
+			ClearBackground(BLACK);
+			BeginShaderMode(aaShader);
+			DrawTextureRec(sceneRT.texture, Rectangle{ 0, 0, screenX, -screenY, }, { 0, 0 }, WHITE);
 			EndShaderMode();
+			
 			DrawFPS(10, 10);
+			rlImGuiEnd();
 		EndDrawing();
 	}
-
+	rlImGuiShutdown();
 	CloseWindow();
 	return 0;
 }
@@ -527,4 +611,12 @@ Color addCols(Color c, Color c2, float intensity)
 	c.b = Clamp(c.b + (int)(c2.b * intensity), 0, 255);
 
 	return c;
+}
+
+void swapCursor()
+{
+	(isCursor == true) ? DisableCursor() : EnableCursor();
+	isCursor = !isCursor;
+	resetMouse();
+
 }

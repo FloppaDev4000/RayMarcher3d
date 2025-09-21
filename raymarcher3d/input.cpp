@@ -53,9 +53,6 @@ Vector2 actionVector(int minusX[], int plusX[], int minusY[], int plusY[]) // NO
 	return { actionAxis(minusX, plusX), actionAxis(minusY, plusY) };
 }
 
-
-
-
 int arrayLen(int arr[])
 {
 	return sizeof(arr) / sizeof(arr[0]);
@@ -63,4 +60,20 @@ int arrayLen(int arr[])
 int arrayLen(Vector2 arr[])
 {
 	return sizeof(arr) / sizeof(arr[0]);
+}
+
+Vector2 prevMousePos = Vector2Zero();
+Vector2 mouseMovement()
+{
+	Vector2 mousePos = GetMousePosition();
+	Vector2 movement = mousePos - prevMousePos;
+
+	prevMousePos = mousePos;
+
+	return movement;
+}
+
+void resetMouse()
+{
+	prevMousePos = GetMousePosition();
 }

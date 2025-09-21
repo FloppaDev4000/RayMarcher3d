@@ -12,6 +12,8 @@ Vector2 actionVector(int[], int[], int[], int[]); // get Vector2 from 4 actions 
 // (used by input.cpp)
 int arrayLen(int[]);
 int arrayLen(Vector2[]);
+Vector2 mouseMovement();
+void resetMouse();
 
 // Built-in actions
 const int action_UiLeft[2] = { KEY_A, KEY_LEFT };
