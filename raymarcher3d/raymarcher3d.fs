@@ -44,6 +44,7 @@ uniform float glowIntensity;
 uniform float shadowSmoothness;
 uniform int aoSteps;
 uniform float aoStepSize;
+uniform float aoBias;
 
 float shadowBias = hitThreshold * sb;
 
@@ -243,6 +244,7 @@ float ambientOcclusion (vec3 pos, vec3 normal)
     }
     float res = sum / (aoSteps * aoStepSize);
 
+    return saturate(res + aoBias);
     return res;
 }
 
@@ -383,7 +385,7 @@ void main()
 
         float totalLight = min(lighting, shadow);
 
-        float AO = ambientOcclusion(origin, normal) * 0.3;
+        float AO = ambientOcclusion(origin, normal);
         glow *= AO;
         //AO = saturate(AO);
 
@@ -392,7 +394,9 @@ void main()
 
         // final col setup
         color = (color + bgColor*0.5)*totalLight + bgColor*0.5*AO + max(specular*totalLight, 0);
-        //color = vec3(AO);
+    
+        //if(AO >= 0) color = vec3(1.0, 0.0, 0.0);
+        //if(AO < 0) color = vec3(0.0, 1.0, 0.0);
     }   
 
     FragColor = vec4(color, 1) + glow;

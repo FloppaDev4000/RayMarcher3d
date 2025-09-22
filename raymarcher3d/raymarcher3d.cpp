@@ -59,7 +59,7 @@ float glowIntensity = 0.01;
 
 int aoSteps = 5;
 float aoStepSize = 0.05;
-
+float aoBias = 0.5;
 
 
 bool isCursor = true;
@@ -378,6 +378,7 @@ int main()
 	int shadowSmoothLoc = GetShaderLocation(shader, "shadowSmoothness");
 	int aoStepsLoc = GetShaderLocation(shader, "aoSteps");
 	int aoStepSizeLoc = GetShaderLocation(shader, "aoStepSize");
+	int aoBiasLoc = GetShaderLocation(shader, "aoBias");
 
 	swapCursor();
 
@@ -462,6 +463,7 @@ int main()
 		SetShaderValue(shader, shadowSmoothLoc, &shadowSmoothness, SHADER_UNIFORM_FLOAT);
 		SetShaderValue(shader, aoStepsLoc, &aoSteps, SHADER_UNIFORM_INT);
 		SetShaderValue(shader, aoStepSizeLoc, &aoStepSize, SHADER_UNIFORM_FLOAT);
+		SetShaderValue(shader, aoBiasLoc, &aoBias, SHADER_UNIFORM_FLOAT);
 
 		if (IsKeyDown(KEY_ONE))
 		{
@@ -527,6 +529,7 @@ int main()
 
 					ImGui::SliderInt("AO steps", &aoSteps, 0, 10);
 					ImGui::SliderFloat("AO step size", &aoStepSize, 0.01, 0.1);
+					ImGui::SliderFloat("AO bias", &aoBias, -2, 2);
 
 					ImGui::TextUnformatted("Light Pos");
 					ImGui::SliderFloat("X:", &lightPos.x, -8, 8);
